@@ -76,7 +76,7 @@ def create_app(
         accept_terms=settings.accept_terms,
         sms_2fa=settings.sms_2fa,
     )
-    aliases = AliasService(backend, settings.max_aliases_per_hour)
+    aliases = AliasService(backend, settings.max_aliases_per_hour, settings.reuse_minutes)
     failures = FailureLimiter()
     stop = threading.Event()
 
