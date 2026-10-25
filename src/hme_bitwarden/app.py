@@ -71,7 +71,10 @@ def create_app(
         )
 
     backend = backend or ICloudAccount(
-        settings.session_dir, on_session_lost=on_session_lost, accept_terms=settings.accept_terms
+        settings.session_dir,
+        on_session_lost=on_session_lost,
+        accept_terms=settings.accept_terms,
+        sms_2fa=settings.sms_2fa,
     )
     aliases = AliasService(backend, settings.max_aliases_per_hour)
     failures = FailureLimiter()

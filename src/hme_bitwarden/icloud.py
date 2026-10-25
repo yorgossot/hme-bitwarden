@@ -23,11 +23,48 @@ from typing import Any, Protocol
 
 import requests
 from pyicloud import PyiCloudService
-from pyicloud.exceptions import PyiCloudException, PyiCloudFailedLoginException
+from pyicloud.exceptions import PyiCloudAPIResponseException, PyiCloudException, PyiCloudFailedLoginException
 
 log = logging.getLogger(__name__)
 
 _NETWORK_ERRORS = (PyiCloudException, requests.RequestException)
+
+_REPAIR_PENDING = 412
+
+
+def _accept_sms_code_with_repair_pending() -> None:
+    """Treat Apple's 412 on SMS code verification as accepted, as pyicloud's bridge validator already does.
+
+    Apple answers a correct SMS code with 412 (and an X-Apple-Repair-Session-Token) when the account has
+    housekeeping pending; pyicloud 2026.10.1 reports that as a wrong code, so 2FA can never complete.
+    """
+    original = PyiCloudService._validate_sms_code
+    if getattr(original, "_hme_repair_pending_ok", False):
+        return
+
+    def validate_sms_code(self: PyiCloudService, code: str) -> None:
+        try:
+            original(self, code)
+        except (PyiCloudAPIResponseException, requests.HTTPError) as error:
+            response = getattr(error, "response", None)
+            if response is None or response.status_code != _REPAIR_PENDING:
+                raise
+            log.info("Apple accepted the SMS code with 412 (account repair pending)")
+
+    validate_sms_code._hme_repair_pending_ok = True  # type: ignore[attr-defined]
+    PyiCloudService._validate_sms_code = validate_sms_code  # type: ignore[method-assign]
+
+
+def _use_sms_for_2fa() -> None:
+    """Skip Apple's trusted-device bridge so codes always come by SMS ("Text me a code").
+
+    The bridge waits for a device prompt that a headless service cannot answer; it times out after 30 s and
+    only then falls back to SMS. Class-level on purpose: pyicloud starts 2FA inside its constructor.
+    """
+    PyiCloudService._supports_trusted_device_bridge = lambda self: False  # type: ignore[method-assign]
+
+
+_accept_sms_code_with_repair_pending()
 
 
 class AccountState(StrEnum):
@@ -84,12 +121,15 @@ class ICloudAccount:
         on_session_lost: Callable[[str], None] | None = None,
         service_factory: ServiceFactory = PyiCloudService,
         accept_terms: bool = False,
+        sms_2fa: bool = False,
     ) -> None:
         self._session_dir = session_dir
         self._account_file = session_dir / "account.json"
         self._on_session_lost = on_session_lost or (lambda _reason: None)
         self._factory = service_factory
         self._accept_terms = accept_terms  # let pyicloud accept updated iCloud terms when Apple asks
+        if sms_2fa:
+            _use_sms_for_2fa()
         self._lock = threading.RLock()
         self._api: PyiCloudService | None = None
         self._pending: PyiCloudService | None = None

@@ -177,6 +177,7 @@ All settings are environment variables. Every secret can be read from a file ins
 | `HME_HOST`, `HME_PORT` | `0.0.0.0`, `8000` | Listen address |
 | `HME_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, ... |
 | `HME_ACCEPT_TERMS` | `false` | Accept updated iCloud terms of service on your behalf when Apple requires it (otherwise sign-in fails with *You must accept the updated terms*) |
+| `HME_2FA_SMS` | `false` | Always send the 2FA code by SMS instead of waiting 30 s for a device prompt the service cannot answer |
 | `HME_ACCESS_LOG` | `false` | HTTP access log; off by default because URLs contain the websites you create addresses for |
 
 ## Security
