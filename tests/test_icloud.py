@@ -48,8 +48,9 @@ class FakeService:
     needs_2fa = True
     session_valid = True
 
-    def __init__(self, apple_id, password=None, cookie_directory=None, authenticate=True):
+    def __init__(self, apple_id, password=None, cookie_directory=None, authenticate=True, accept_terms=False):
         self.account_name = apple_id
+        self.accept_terms = accept_terms
         self.password = password
         self.cookie_directory = cookie_directory
         self.trusted = False
@@ -137,6 +138,26 @@ def test_sign_in_with_2fa(account, tmp_path):
     # The password is never written to disk.
     for file in (tmp_path / "session").rglob("*"):
         assert "pw" not in file.read_text()
+
+
+def test_accept_terms_is_passed_to_every_service(tmp_path, lost):
+    FakeService.instances.clear()
+    first = ICloudAccount(
+        tmp_path / "session", on_session_lost=lost.append, service_factory=FakeService, accept_terms=True
+    )
+    sign_in(first)
+    restarted = ICloudAccount(
+        tmp_path / "session", on_session_lost=lost.append, service_factory=FakeService, accept_terms=True
+    )
+    assert restarted.refresh().state is AccountState.READY
+    assert len(FakeService.instances) == 2
+    assert all(service.accept_terms for service in FakeService.instances)
+
+
+def test_terms_are_not_accepted_by_default(account):
+    FakeService.instances.clear()
+    account.start_sign_in("me@icloud.com", "pw")
+    assert FakeService.instances[-1].accept_terms is False
 
 
 def test_sign_in_without_2fa_when_session_is_trusted(account):

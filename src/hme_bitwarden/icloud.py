@@ -83,11 +83,13 @@ class ICloudAccount:
         session_dir: Path,
         on_session_lost: Callable[[str], None] | None = None,
         service_factory: ServiceFactory = PyiCloudService,
+        accept_terms: bool = False,
     ) -> None:
         self._session_dir = session_dir
         self._account_file = session_dir / "account.json"
         self._on_session_lost = on_session_lost or (lambda _reason: None)
         self._factory = service_factory
+        self._accept_terms = accept_terms  # let pyicloud accept updated iCloud terms when Apple asks
         self._lock = threading.RLock()
         self._api: PyiCloudService | None = None
         self._pending: PyiCloudService | None = None
@@ -125,7 +127,9 @@ class ICloudAccount:
             self._pending = None
             self._prepare_session_dir()
             try:
-                api = self._factory(apple_id, password, cookie_directory=str(self._session_dir))
+                api = self._factory(
+                    apple_id, password, cookie_directory=str(self._session_dir), accept_terms=self._accept_terms
+                )
             except PyiCloudFailedLoginException as error:
                 raise SignInFailed("Apple ID or password is incorrect.") from error
             except _NETWORK_ERRORS as error:
@@ -222,7 +226,12 @@ class ICloudAccount:
             if not apple_id:
                 self._problem = "Not signed in yet"
                 return
-            api = self._factory(apple_id, cookie_directory=str(self._session_dir), authenticate=False)
+            api = self._factory(
+                apple_id,
+                cookie_directory=str(self._session_dir),
+                authenticate=False,
+                accept_terms=self._accept_terms,
+            )
         try:
             # Valid session: a single /validate call. Otherwise token login, then password (memory only).
             api.authenticate()

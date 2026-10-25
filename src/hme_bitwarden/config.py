@@ -48,6 +48,7 @@ class Settings:
     port: int = 8000
     trusted_proxies: str = "127.0.0.1"
     access_log: bool = False
+    accept_terms: bool = False
 
     @property
     def session_dir(self) -> Path:
@@ -152,4 +153,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         port=_int(env, "HME_PORT", 8000, minimum=1),
         trusted_proxies=_read(env, "HME_TRUSTED_PROXIES", "127.0.0.1"),
         access_log=_bool(env, "HME_ACCESS_LOG", False),
+        accept_terms=_bool(env, "HME_ACCEPT_TERMS", False),
     )
