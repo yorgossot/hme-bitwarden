@@ -1,0 +1,32 @@
+# Single-host deployment, tailnet only: `tailscale serve --https=8443 http://127.0.0.1:8000` is the only way in.
+# /etc/hme-bitwarden/env (root, 600) holds HME_API_TOKEN, HME_ADMIN_PASSWORD and HME_PUBLIC_URL (the serve URL).
+services:
+  hme-bitwarden:
+    build: .
+    image: hme-bitwarden:pi
+    container_name: hme-bitwarden
+    restart: unless-stopped
+    env_file: /etc/hme-bitwarden/env
+    environment:
+      # tailscale serve connects to 127.0.0.1:8000 and Docker forwards from this network's gateway
+      HME_TRUSTED_PROXIES: 172.29.0.1
+    volumes:
+      - hme-data:/data          # iCloud session (cookies + trust token), never the password
+    ports:
+      - "127.0.0.1:8000:8000"   # host loopback only; tailscale serve is the only way in
+    networks: [hme]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+
+networks:
+  hme:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+          gateway: 172.29.0.1
+
+volumes:
+  hme-data:
