@@ -32,11 +32,28 @@ _NETWORK_ERRORS = (PyiCloudException, requests.RequestException)
 _REPAIR_PENDING = 412
 
 
-def _accept_sms_code_with_repair_pending() -> None:
-    """Treat Apple's 412 on SMS code verification as accepted, as pyicloud's bridge validator already does.
+def _accepted_with_repair(response: requests.Response | None) -> bool:
+    """412 + repair session, and the body does not say ``securityCode.valid: false``."""
+    if (
+        response is None
+        or response.status_code != _REPAIR_PENDING
+        or not response.headers.get("X-Apple-Repair-Session-Token")
+    ):
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return True
+    security_code = body.get("securityCode") if isinstance(body, dict) else None
+    return not (isinstance(security_code, dict) and security_code.get("valid") is False)
 
-    Apple answers a correct SMS code with 412 (and an X-Apple-Repair-Session-Token) when the account has
-    housekeeping pending; pyicloud 2026.10.1 reports that as a wrong code, so 2FA can never complete.
+
+def _accept_sms_code_with_repair_pending() -> None:
+    """Treat Apple's 412 + repair session on SMS code verification as an accepted code.
+
+    Apple answers a correct SMS code with 412 and an X-Apple-Repair-Session-Token when the account has repair
+    steps pending (e.g. updated terms); pyicloud 2026.10.1 reports that as a wrong code, so 2FA never completes.
+    A 412 without a repair session still fails. Same rule as our upstream fix proposal.
     """
     original = PyiCloudService._validate_sms_code
     if getattr(original, "_hme_repair_pending_ok", False):
@@ -47,7 +64,7 @@ def _accept_sms_code_with_repair_pending() -> None:
             original(self, code)
         except (PyiCloudAPIResponseException, requests.HTTPError) as error:
             response = getattr(error, "response", None)
-            if response is None or response.status_code != _REPAIR_PENDING:
+            if not _accepted_with_repair(response):
                 raise
             log.info("Apple accepted the SMS code with 412 (account repair pending)")
 
